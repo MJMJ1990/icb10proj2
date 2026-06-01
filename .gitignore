@@ -1,0 +1,89 @@
+# ==========================================
+# 파이썬 데이터 분석 프로젝트 .gitignore
+# ==========================================
+
+# --- 파이썬 컴파일 및 빌드 파일 ---
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# --- 가상환경 (uv 및 기존 가상환경 포함) ---
+.venv/
+venv/
+ENV/
+env/
+*.venv
+
+# --- Jupyter Notebook 관련 ---
+.ipynb_checkpoints
+*/.ipynb_checkpoints/*
+ipython_log.py
+
+# --- 데이터 및 대용량 파일 (보안 및 용량 제한 대비) ---
+# 데이터 분석 프로젝트에서는 대용량 데이터나 보안 정보가 포함된 데이터를 Git에 올리지 않는 것이 원칙입니다.
+# data 폴더 전체를 제외하고, 데이터 포맷들을 명시적으로 제외합니다.
+data/
+*.csv
+*.xlsx
+*.xls
+*.tsv
+*.parquet
+*.pkl
+*.pickle
+*.jsonl
+*.db
+*.sqlite
+*.sqlite3
+*.h5
+*.hdf5
+*.npy
+*.npz
+
+# --- 환경 설정 및 비밀번호 / API 키 (보안) ---
+.env
+.env.local
+.env.*
+secrets.toml
+*.pem
+*.key
+credentials.json
+
+# --- IDE 및 에디터 설정 ---
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.swp
+*~
+.DS_Store
+Thumbs.db
+
+# --- 로그 및 모니터링/캐시 파일 ---
+*.log
+.pytest_cache/
+.tox/
+.coverage
+.cache/
+.mypy_cache/
+.ruff_cache/
