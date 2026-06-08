@@ -92,4 +92,3 @@ Thumbs.db
 .*
 !.gitignore
 !.gitkeep
-!.agents/
