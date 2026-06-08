@@ -87,3 +87,9 @@ Thumbs.db
 .cache/
 .mypy_cache/
 .ruff_cache/
+
+# --- 숨김 파일 및 폴더 (기본적으로 모두 제외하되, 필수 파일/폴더는 예외) ---
+.*
+!.gitignore
+!.gitkeep
+!.agents/
