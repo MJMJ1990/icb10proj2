@@ -92,12 +92,14 @@ Thumbs.db
 .*
 !.gitignore
 !.gitkeep
+!.streamlit/
 
 # --- 일반 설정 파일 및 로컬 설정 ---
 config.json
 config.yaml
 config.yml
 config.toml
+!naver-api-app/.streamlit/config.toml
 config.ini
 config.xml
 local_settings.py

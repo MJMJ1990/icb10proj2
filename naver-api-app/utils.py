@@ -47,14 +47,24 @@ def parse_keywords(keywords_str: str) -> list:
 def render_sidebar():
     """
     모든 페이지에서 공통으로 사용되는 사이드바 컴포넌트를 렌더링합니다.
-    .env 파일에 API 키가 설정되어 있으면 자동으로 로드하여 세션에 저장하고 사이드바 입력을 생략합니다.
+    Streamlit 설정(st.secrets) 또는 .env 파일에 API 키가 설정되어 있으면 자동으로 로드하여 세션에 저장하고 사이드바 입력을 생략합니다.
     설정되어 있지 않은 경우에만 사용자로부터 직접 입력을 받습니다.
     """
     st.sidebar.title("🔑 네이버 API 설정")
     
-    # .env 파일 혹은 환경 변수에서 로드 시도
-    env_id = os.getenv("NAVER_CLIENT_ID", "").strip()
-    env_secret = os.getenv("NAVER_CLIENT_SECRET", "").strip()
+    # st.secrets 우선 시도 후 .env / 환경 변수 로드
+    env_id = ""
+    env_secret = ""
+    
+    if "NAVER_CLIENT_ID" in st.secrets:
+        env_id = str(st.secrets["NAVER_CLIENT_ID"]).strip()
+    else:
+        env_id = os.getenv("NAVER_CLIENT_ID", "").strip()
+        
+    if "NAVER_CLIENT_SECRET" in st.secrets:
+        env_secret = str(st.secrets["NAVER_CLIENT_SECRET"]).strip()
+    else:
+        env_secret = os.getenv("NAVER_CLIENT_SECRET", "").strip()
     
     # 세션 상태 초기화
     if "client_id" not in st.session_state:
@@ -62,13 +72,16 @@ def render_sidebar():
     if "client_secret" not in st.session_state:
         st.session_state["client_secret"] = env_secret
         
-    # 만약 .env에 유효한 키가 설정되어 있다면 바로 사용
+    # 만약 유효한 키가 설정되어 있다면 바로 사용
     if env_id and env_secret:
         st.session_state["client_id"] = env_id
         st.session_state["client_secret"] = env_secret
-        st.sidebar.success("✅ .env 환경 변수에서 API 키를 자동으로 로드했습니다.")
+        
+        # 로드한 소스 표시
+        source = "st.secrets 설정" if "NAVER_CLIENT_ID" in st.secrets else ".env 환경 변수"
+        st.sidebar.success(f"✅ {source}에서 API 키를 자동으로 로드했습니다.")
     else:
-        # .env에 키가 없는 경우에만 수동 입력란 노출 (폴백)
+        # 키가 없는 경우에만 수동 입력란 노출 (폴백)
         client_id = st.sidebar.text_input(
             "Naver Client ID",
             value=st.session_state["client_id"],
@@ -86,7 +99,7 @@ def render_sidebar():
         if check_api_credentials(client_id, client_secret):
             st.sidebar.success("✅ API 설정 완료")
         else:
-            st.sidebar.warning("⚠️ API 설정을 완료해주세요 (사이드바 입력 혹은 .env 파일 설정).")
+            st.sidebar.warning("⚠️ API 설정을 완료해주세요 (사이드바 입력, secrets.toml 혹은 .env 파일 설정).")
 
 @st.cache_data(show_spinner=False)
 def fetch_search_data(
