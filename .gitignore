@@ -92,3 +92,15 @@ Thumbs.db
 .*
 !.gitignore
 !.gitkeep
+
+# --- 일반 설정 파일 및 로컬 설정 ---
+config.json
+config.yaml
+config.yml
+config.toml
+config.ini
+config.xml
+local_settings.py
+settings.local.py
+*.config
+
