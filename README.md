@@ -1,3 +1,15 @@
+# 📊 네이버 API 데이터 분석 프로젝트
+
+### 🔗 Streamlit 배포 주소
+* **Streamlit 서비스 바로가기**: https://icb10proj2-4rwal4ldgdkqzp9crufmam.streamlit.app/
+
+### 🛠️ 최근 프로젝트 작업 내역 (업데이트: 2026-06-13)
+1. **의존성 관리 경로 개선**: `naver-api-app/requirements.txt` 파일을 워크스페이스 루트 경로로 이동하여 가상환경 연동을 최적화했습니다.
+2. **Git 자동화 연동**: 로컬에서 `git commit`이 성공적으로 수행되면 원격 저장소로 즉시 반영되도록 Git `post-commit` 훅 설정을 연동했습니다.
+3. **보안 검토 완료**: `.gitignore` 설정에 따라 `.env` 설정 파일, API Key, `data/` 하위 데이터셋 등 중요 자산이 원격 저장소에 노출되지 않음을 최종 점검했습니다.
+
+---
+
 ## STEP 0. 팀 구성 및 협업 환경 세팅
 
 ### 슬랙 세팅
