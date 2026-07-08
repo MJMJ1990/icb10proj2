@@ -23,7 +23,8 @@ st.set_page_config(
 )
 
 # 데이터베이스 경로 설정
-DB_PATH = os.path.join("saramin", "data", "saramin_jobs_hr.db")
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DB_PATH = os.path.join(BASE_DIR, "data", "saramin_jobs_hr.db")
 
 # 분석 키워드 사전 정의
 KEYWORDS = {
