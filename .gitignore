@@ -103,6 +103,9 @@ config.toml
 config.ini
 config.xml
 local_settings.py
-settings.local.py
 *.config
+
+# --- 사람인 대시보드 데이터베이스 배포를 위한 예외 처리 ---
+!saramin/data/
+!saramin/data/saramin_jobs_hr.db
 
