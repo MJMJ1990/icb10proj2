@@ -51,16 +51,18 @@ def load_and_preprocess_data():
     df = pd.read_parquet(parquet_path)
     df_excel = pd.read_excel(excel_path)
     
-    # 엑셀 매핑 파일에서 자치구명 및 행정동명 추출 (2번째 열: 코드, 4번째 열: 자치구, 5번째 열: 행정동)
-    df_mapping = df_excel.iloc[:, [1, 3, 4]].copy()
-    df_mapping.columns = ['행정동코드', '자치구명', '행정동명']
+    # 엑셀 매핑 파일에서 자치구명 및 행정동명 추출 (2번째 열: 코드, 1번째 열: 통계청코드, 4번째 열: 자치구, 5번째 열: 행정동)
+    df_mapping = df_excel.iloc[:, [1, 0, 3, 4]].copy()
+    df_mapping.columns = ['행정동코드', '통계청코드', '자치구명', '행정동명']
     
     # 영문 컬럼명('H_DNG_CD')이나 숫자가 아닌 쓰레기 데이터 행을 안전하게 제거
     df_mapping['행정동코드'] = pd.to_numeric(df_mapping['행정동코드'], errors='coerce')
-    df_mapping = df_mapping.dropna(subset=['행정동코드'])
+    df_mapping['통계청코드'] = pd.to_numeric(df_mapping['통계청코드'], errors='coerce')
+    df_mapping = df_mapping.dropna(subset=['행정동코드', '통계청코드'])
     
     # 데이터 타입을 문자열(str)로 통일하여 Parquet 데이터와 안전하게 조인
     df_mapping['행정동코드'] = df_mapping['행정동코드'].astype('int32').astype('str')
+    df_mapping['통계청코드'] = df_mapping['통계청코드'].astype('int32').astype('str')
     
     # 중복 행 제거
     df_mapping = df_mapping.drop_duplicates(subset=['행정동코드'])
@@ -102,6 +104,59 @@ def load_and_preprocess_data():
     df = df.dropna(subset=['행정동명'])
     
     return df
+
+@st.cache_data(show_spinner="서울시 지도 GeoJSON 데이터를 로딩하는 중입니다...")
+def load_seoul_geojson(unit: str) -> dict:
+    """로컬 GeoJSON 파일에서 서울시 영역 지도를 불러오고 캐싱합니다. 로컬에 없는 경우 원격에서 로드하여 필터링합니다.
+
+    Args:
+        unit (str): 'municipalities' (구별) 또는 'submunicipalities' (동별)
+
+    Returns:
+        dict: 서울특별시 영역 피처들로 구성된 GeoJSON
+    """
+    import json
+    local_path = f"seoul-pops/data/seoul_{unit}.geojson"
+    
+    # 1. 로컬에 이미 최적화된 파일이 있으면 즉시 로드 (0.01초 소요)
+    if os.path.exists(local_path):
+        try:
+            with open(local_path, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except Exception as e:
+            st.warning(f"로컬 지도 파일 로드 실패, 원격에서 복구를 시도합니다: {e}")
+            
+    # 2. 로컬에 없는 경우 원격 저장소에서 백업용 다운로드 (Fallback)
+    import requests
+    url = f"https://raw.githubusercontent.com/southkorea/southkorea-maps/master/kostat/2018/json/skorea-{unit}-2018-geo.json"
+    try:
+        res = requests.get(url, timeout=15)
+        res.raise_for_status()
+        data = res.json()
+        
+        # properties.code가 서울시 코드 '11'로 시작하는 행정구역만 추출
+        seoul_features = [
+            f for f in data.get('features', [])
+            if str(f.get('properties', {}).get('code', '')).startswith('11')
+        ]
+        
+        seoul_geojson = {
+            "type": "FeatureCollection",
+            "features": seoul_features
+        }
+        
+        # 향후 기동 속도 향상을 위해 로컬 캐시 파일로 저장
+        try:
+            os.makedirs(os.path.dirname(local_path), exist_ok=True)
+            with open(local_path, 'w', encoding='utf-8') as f:
+                json.dump(seoul_geojson, f, ensure_ascii=False, indent=2)
+        except Exception:
+            pass
+            
+        return seoul_geojson
+    except Exception as e:
+        st.error(f"지도 GeoJSON 로딩 실패: {e}")
+        return {"type": "FeatureCollection", "features": []}
 
 # 데이터 로드 실행
 try:
@@ -219,10 +274,11 @@ with kpi4:
 # -----------------------------------------------------------------------------
 # 5. 탭 레이아웃 설계 (UI/UX)
 # -----------------------------------------------------------------------------
-tab1, tab2, tab3 = st.tabs([
+tab1, tab2, tab3, tab4 = st.tabs([
     "📂 데이터 개요 & 프로파일링", 
     "📈 기본 기술통계 & 보고서", 
-    "📊 생활인구 다차원 시각화"
+    "📊 생활인구 다차원 시각화",
+    "🗺️ 생활인구 지도 시각화"
 ])
 
 # -----------------------------------------------------------------------------
@@ -630,3 +686,117 @@ with tab3:
     with col_e10:
         st.markdown("**💡 데이터 분석 및 해석**")
         st.info("요일과 시간대의 2차원 교차 히트맵 분석을 통해, 주중 오전 9시부터 오후 6시까지의 경제 활동 핵심 시간대에 서울 전체의 총생활인구 집중도가 가장 극대화됨을 직관적으로 증명합니다. 주말 밤/주말 낮 패턴도 비교 가능합니다.")
+
+# -----------------------------------------------------------------------------
+# [TAB 4] 생활인구 지도 시각화
+# -----------------------------------------------------------------------------
+with tab4:
+    st.subheader("🗺️ 서울시 구별/동별 생활인구 지도 시각화")
+    st.markdown("Folium 코로플리스 맵을 통해 시간대별/지역별 생활인구 밀도를 공간적으로 분석합니다. 사이드바 필터(시간대, 요일, 성별 등)와 연동됩니다.")
+    
+    import folium
+    import copy
+    
+    # 지도 분석 단위 선택
+    map_unit = st.radio(
+        "지도 시각화 단위 선택",
+        options=["자치구별", "행정동별"],
+        horizontal=True,
+        index=0
+    )
+    
+    # 1. 지도 시각화 데이터 집계 및 가공
+    if map_unit == "자치구별":
+        # 구별로 집계하기 위해 통계청코드 앞 5자리 추출하여 구코드 생성
+        df_filtered['구코드'] = df_filtered['통계청코드'].str[:5]
+        
+        # 구코드별 평균 인구 집계 (observed=True 적용)
+        df_map_data = df_filtered.groupby(['구코드', '자치구명'], observed=True)['생활인구수'].mean().reset_index()
+        df_map_data.columns = ['key', 'name', '평균생활인구']
+        
+        # GeoJSON 로드 (로컬 최적화 파일 우선 로드)
+        seoul_geojson = load_seoul_geojson("municipalities")
+        legend_name = "자치구별 평균 생활인구수 (명)"
+    else:
+        # 동별 평균 인구 집계 (observed=True 적용)
+        df_map_data = df_filtered.groupby(['통계청코드', '행정동명'], observed=True)['생활인구수'].mean().reset_index()
+        df_map_data.columns = ['key', 'name', '평균생활인구']
+        
+        # GeoJSON 로드 (로컬 최적화 파일 우선 로드)
+        seoul_geojson = load_seoul_geojson("submunicipalities")
+        legend_name = "행정동별 평균 생활인구수 (명)"
+        
+    if not seoul_geojson or not seoul_geojson.get('features'):
+        st.warning("⚠️ 지도 데이터를 불러오는 중 오류가 발생했거나 데이터가 비어 있습니다.")
+    else:
+        # 데이터 매핑용 딕셔너리 생성
+        density_dict = dict(zip(df_map_data['key'], df_map_data['평균생활인구']))
+        name_dict = dict(zip(df_map_data['key'], df_map_data['name']))
+        
+        # GeoJSON에 인구밀도 데이터 주입하여 툴팁 연동 준비 (Deep Copy)
+        seoul_geojson_mapped = copy.deepcopy(seoul_geojson)
+        for feature in seoul_geojson_mapped['features']:
+            code = feature['properties']['code']
+            val = density_dict.get(code, 0)
+            feature['properties']['density'] = round(val, 1)
+            # 매핑된 정확한 이름을 tooltip에 렌더링하기 위해 properties 주입
+            feature['properties']['mapped_name'] = name_dict.get(code, feature['properties']['name'])
+            
+        # 2. Folium 지도 객체 생성 (서울시 중심 좌표 기준)
+        m = folium.Map(
+            location=[37.5665, 126.9780],
+            zoom_start=11,
+            tiles="cartodbpositron" # 가독성 좋은 밝은 배경 테마
+        )
+        
+        # 3. 코로플리스 맵 레이어 추가
+        folium.Choropleth(
+            geo_data=seoul_geojson,
+            data=df_map_data,
+            columns=['key', '평균생활인구'],
+            key_on='feature.properties.code',
+            fill_color='YlOrRd',
+            fill_alpha=0.7,
+            line_alpha=0.3,
+            legend_name=legend_name,
+            highlight=True
+        ).add_to(m)
+        
+        # 4. 마우스 오버 툴팁 기능을 위한 인터랙티브 투명 GeoJSON 레이어 추가
+        tooltip = folium.GeoJsonTooltip(
+            fields=['mapped_name', 'density'],
+            aliases=['행정구역명:', '평균 생활인구 (명):'],
+            localize=True,
+            sticky=True,
+            style="background-color: white; color: #333333; font-family: sans-serif; font-size: 12px; border: 1px solid grey; border-radius: 3px; padding: 10px;"
+        )
+        
+        folium.GeoJson(
+            seoul_geojson_mapped,
+            style_function=lambda x: {
+                'fillColor': 'transparent', 
+                'color': 'black', 
+                'weight': 0.5,
+                'fillOpacity': 0.0
+            },
+            highlight_function=lambda x: {
+                'weight': 2.0, 
+                'color': '#FF6B6B',
+                'fillOpacity': 0.1
+            },
+            tooltip=tooltip
+        ).add_to(m)
+        
+        # 5. Streamlit HTML 컴포넌트로 지도 임베딩 렌더링
+        st.markdown("#### 🗺️ 서울시 생활인구 공간 밀도 분포")
+        st.caption("지도 영역 위에 마우스를 올리면 각 행정구역의 상세 명칭과 평균 생활인구수 수치를 실시간으로 보실 수 있습니다.")
+        st.components.v1.html(m._repr_html_(), height=650)
+        
+        # 통계 데이터 테이블 추가 제공
+        st.markdown("#### 📋 지도 연동 요약 데이터 테이블")
+        df_table_show = df_map_data.sort_values(by='평균생활인구', ascending=False).reset_index(drop=True)
+        df_table_show.columns = ['행정구역코드', '행정구역명', '평균 생활인구수 (명)']
+        st.dataframe(df_table_show, use_container_width=True)
+        
+        # 50자 이상의 시각화 해석 및 설명
+        st.info("💡 **지도 시각화 분석 해석**: 코로플리스 지도상에서 붉은색 농도가 짙을수록 생활인구가 밀집된 지역입니다. 시간대 필터링을 변경함에 따라 주간 오피스 집중 지구와 야간 주거 위주 배후 지구 간의 극명한 인구 대칭 이동 현상을 지리적으로 생생히 관찰할 수 있습니다.")
