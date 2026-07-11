@@ -1,9 +1,9 @@
 """
-서울시 생활인구 Parquet 데이터를 가공하고 집계하여 SQLite 데이터베이스로 저장하는 사전 연산(Pre-computation) 프로그램입니다.
+서울시 생활인구 Parquet 데이터를 가공하고 시간대별 차원을 포함하여 SQLite 데이터베이스로 저장하는 사전 연산(Pre-computation) 프로그램입니다.
 
 이 모듈은 대용량 원본 데이터에서 대시보드 시각화 및 지도 필터 연동에 필요한 모든 집계 데이터를 
-미리 계산(Group By)하고 SQLite 데이터베이스의 고속 인덱싱 테이블로 적재합니다.
-이를 통해 대시보드 구동 시의 메모리 점유율을 줄이고, 런타임 조회 속도를 극대화합니다.
+시간대별(0~23시) 차원을 보존한 채 미리 계산(Group By)하여 SQLite 데이터베이스의 고속 인덱싱 테이블로 적재합니다.
+이를 통해 대시보드에서 시간대를 조정했을 때 모든 집계 데이터와 지도가 실시간으로 정확하게 반응하도록 지원합니다.
 """
 
 import os
@@ -93,9 +93,9 @@ def main():
     
     df_sample.to_sql('df_sample', conn, if_exists='replace', index=False)
 
-    # --- 3.2. daily_pop_trend: 일자별 합산 총생활인구수 (시계열 차트용) ---
-    print("사전 적재 2: daily_pop_trend (일별 합계) 집계 및 적재 중...")
-    daily_trend = df.groupby('기준일ID', observed=True)['총생활인구수'].sum().reset_index()
+    # --- 3.2. daily_pop_trend: 일자별 x 시간대별 합산 총생활인구수 (시간대 조절 시 반영) ---
+    print("사전 적재 2: daily_pop_trend (일별 x 시간대별 합계) 집계 및 적재 중...")
+    daily_trend = df.groupby(['기준일ID', '시간대구분'], observed=True)['총생활인구수'].sum().reset_index()
     daily_trend.to_sql('daily_pop_trend', conn, if_exists='replace', index=False)
 
     # --- 3.3. hourly_pop_trend: 시간대별 평균 총생활인구수 (시간대 차트용) ---
@@ -103,27 +103,27 @@ def main():
     hourly_trend = df.groupby('시간대구분', observed=True)['총생활인구수'].mean().reset_index()
     hourly_trend.to_sql('hourly_pop_trend', conn, if_exists='replace', index=False)
 
-    # --- 3.4. gender_pop_mean: 성별 기술 통계 집계 (성별 차트용) ---
-    print("사전 적재 4: gender_pop_mean (성별 기술통계) 집계 및 적재 중...")
-    gender_stats = df.groupby('성별', observed=True)['생활인구수'].agg(['mean', 'std', 'max']).reset_index()
+    # --- 3.4. gender_pop_mean: 성별 x 시간대별 기술 통계 집계 ---
+    print("사전 적재 4: gender_pop_mean (성별 x 시간대별 기술통계) 집계 및 적재 중...")
+    gender_stats = df.groupby(['성별', '시간대구분'], observed=True)['생활인구수'].agg(['mean', 'std', 'max']).reset_index()
     gender_stats['성별'] = gender_stats['성별'].astype(str)
     gender_stats.to_sql('gender_pop_mean', conn, if_exists='replace', index=False)
 
-    # --- 3.5. age_pop_mean: 연령대 대분류별 기술 통계 집계 (연령대 차트용) ---
-    print("사전 적재 5: age_pop_mean (연령대별 기술통계) 집계 및 적재 중...")
-    age_stats = df.groupby('연령대_대분류', observed=True)['생활인구수'].agg(['mean', 'std', 'median']).reset_index()
+    # --- 3.5. age_pop_mean: 연령대 대분류 x 시간대별 기술 통계 집계 ---
+    print("사전 적재 5: age_pop_mean (연령대별 x 시간대별 기술통계) 집계 및 적재 중...")
+    age_stats = df.groupby(['연령대_대분류', '시간대구분'], observed=True)['생활인구수'].agg(['mean', 'std', 'median']).reset_index()
     age_stats['연령대_대분류'] = age_stats['연령대_대분류'].astype(str)
     age_stats.to_sql('age_pop_mean', conn, if_exists='replace', index=False)
 
-    # --- 3.6. gender_age_heatmap: 성별 x 연령대별 평균 생활인구 (2D Heatmap 1용) ---
-    print("사전 적재 6: gender_age_heatmap (성별x연령대 조합 평균) 집계 및 적재 중...")
-    gender_age = df.groupby(['성별', '연령대'], observed=True)['생활인구수'].mean().reset_index()
+    # --- 3.6. gender_age_heatmap: 성별 x 연령대 x 시간대별 평균 생활인구 ---
+    print("사전 적재 6: gender_age_heatmap (성별x연령대x시간대 평균) 집계 및 적재 중...")
+    gender_age = df.groupby(['성별', '연령대', '시간대구분'], observed=True)['생활인구수'].mean().reset_index()
     gender_age['성별'] = gender_age['성별'].astype(str)
     gender_age['연령대'] = gender_age['연령대'].astype(str)
     gender_age.to_sql('gender_age_heatmap', conn, if_exists='replace', index=False)
 
-    # --- 3.7. weekday_hourly_heatmap: 요일 x 시간대별 평균 총생활인구 (2D Heatmap 2용) ---
-    print("사전 적재 7: weekday_hourly_heatmap (요일x시간대 조합 평균) 집계 및 적재 중...")
+    # --- 3.7. weekday_hourly_heatmap: 요일 x 시간대별 평균 총생활인구 ---
+    print("사전 적재 7: weekday_hourly_heatmap (요일x시간대 평균) 집계 및 적재 중...")
     weekday_hourly = df.groupby(['요일', '시간대구분'], observed=True)['총생활인구수'].mean().reset_index()
     weekday_hourly['요일'] = weekday_hourly['요일'].astype(str)
     weekday_hourly.to_sql('weekday_hourly_heatmap', conn, if_exists='replace', index=False)
@@ -148,11 +148,14 @@ def main():
     filter_meta = df[['자치구명', '행정동명']].drop_duplicates().reset_index(drop=True)
     filter_meta.to_sql('filter_metadata', conn, if_exists='replace', index=False)
 
-    # --- 4. 데이터베이스 인덱스 설정 (조회 쿼리 획기적 최적화) ---
+    # --- 5. 데이터베이스 인덱스 설정 (조회 쿼리 획기적 최적화) ---
     print("\n4. SQLite 인덱싱 설정 중 (고속 검색 튜닝)...")
-    # 지도 시각화 쿼리는 (시간대, 요일, 성별)을 복합적으로 조회하므로 다차원 인덱스 필수 지정
     cursor.execute("CREATE INDEX idx_muni_filters ON map_municipalities_hourly (시간대구분, 요일, 성별);")
     cursor.execute("CREATE INDEX idx_sub_filters ON map_submunicipalities_hourly (시간대구분, 요일, 성별);")
+    cursor.execute("CREATE INDEX idx_daily_filters ON daily_pop_trend (시간대구분);")
+    cursor.execute("CREATE INDEX idx_gender_filters ON gender_pop_mean (시간대구분);")
+    cursor.execute("CREATE INDEX idx_age_filters ON age_pop_mean (시간대구분);")
+    cursor.execute("CREATE INDEX idx_gender_age_filters ON gender_age_heatmap (시간대구분);")
     cursor.execute("CREATE INDEX idx_meta ON filter_metadata (자치구명);")
     conn.commit()
 
